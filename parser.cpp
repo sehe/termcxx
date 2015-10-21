@@ -1,5 +1,6 @@
 //#define BOOST_SPIRIT_DEBUG
 #include <boost/fusion/include/adapt_struct.hpp>
+#include <boost/multiprecision/cpp_int.hpp>
 #include <boost/spirit/include/qi.hpp>
 
 #include <vector>
@@ -11,7 +12,7 @@
 namespace termcxx { namespace parser {
     namespace qi      = boost::spirit::qi;
 
-    using Number      = long long;   // TODO FIXME SEHE - must support up to 99 digits (WTF)
+    using Number      = boost::multiprecision::cpp_int;
     using Alias       = std::string;
     using Aliases     = std::vector<Alias>;
 
@@ -148,4 +149,7 @@ int main() {
 
     if (first!=end)
         std::cout << "We have unparsed trailing input: '" << std::string(first, end) << "'\n";
+
+    termcxx::parser::Number large("999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999");
+    std::cout << "99: " << large << "\n";
 }
