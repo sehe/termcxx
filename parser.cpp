@@ -1,13 +1,7 @@
-#include <boost/spirit/include/qi_match.hpp>
-#include <boost/spirit/include/qi.hpp>
-#include <boost/spirit/include/qi_eol.hpp>
-#include <boost/spirit/include/qi_eoi.hpp>
-#include <boost/spirit/include/qi_int.hpp>
-#include <boost/spirit/include/qi.hpp>
-#include <boost/spirit/include/phoenix_core.hpp>
-#include <boost/spirit/include/phoenix_operator.hpp>
 #include <boost/fusion/include/adapt_struct.hpp>
-#include <boost/spirit/include/phoenix_object.hpp>
+#include <boost/spirit/include/phoenix.hpp>
+#include <boost/spirit/include/qi.hpp>
+#include <boost/spirit/include/qi_match.hpp>
 
 #include <vector>
 #include <iostream>
@@ -206,12 +200,19 @@ struct parser
 int
 main ()
 {
-    typedef termcxx::parser::parser<std::istreambuf_iterator<char> > parser;
+    using It = boost::spirit::istream_iterator;
+    typedef termcxx::parser::parser<It> parser;
     parser p;
 
     std::ifstream f ("termtypes.ti");
-    std::istreambuf_iterator<char> input_iterator(f);
-    std::vector<char> input_buffer (input_iterator,
-        std::istreambuf_iterator<char>());
-    boost::spirit::qi::parse(input_buffer.begin(), input_buffer.end(), p);
+    It first(f >> std::nosk), end;
+    bool ok = boost::spirit::qi::parse(first, end, p);
+
+    if (ok)
+        std::cout << "Yay\n";
+    else
+        std::cout << "Nay\n";
+
+    if (first!=end)
+        std::cout << "We have unparsed trailing input: '" << std::string(first, end) << "'\n";
 }
