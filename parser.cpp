@@ -12,7 +12,7 @@
 namespace termcxx { namespace parser {
     namespace qi      = boost::spirit::qi;
 
-    using Bool        = bool;
+    struct Bool { };
     using Number      = boost::multiprecision::cpp_int;
     using Alias       = std::string;
     using Aliases     = std::vector<Alias>;
@@ -115,7 +115,7 @@ namespace termcxx { namespace parser {
             feature_name         = +(print - char_(",=#"));
             string_feature_value = *(char_escape | caret_escape | (print - ','));
 
-            boolean_feature      = feature_name >> qi::attr(true);
+            boolean_feature      = feature_name >> qi::attr(Bool{});
             numeric_feature      = feature_name >> '#' >> int_;
             string_feature       = feature_name >> '=' >> string_feature_value;
 
