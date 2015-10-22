@@ -12,6 +12,7 @@
 namespace termcxx { namespace parser {
     namespace qi      = boost::spirit::qi;
 
+    using Bool        = bool;
     using Number      = boost::multiprecision::cpp_int;
     using Alias       = std::string;
     using Aliases     = std::vector<Alias>;
@@ -22,14 +23,35 @@ namespace termcxx { namespace parser {
     template <typename Value> struct GenericFeature {
         FeatureName name;
         Value       value;
+
+      private:
+        friend std::ostream& operator<<(std::ostream& os, GenericFeature const& gf) {
+            os << gf.name;
+            print_value(os, gf.value);
+            return os;
+        }
+
+        static void print_value(std::ostream& os, Bool)     { }
+        static void print_value(std::ostream& os, Number v) { os << "#" << v; }
+        static void print_value(std::ostream& os, String v) { 
+            os << "=";
+            for(uint8_t ch : v) {
+                if (isprint(ch) && !strchr(",!#\\^", ch)) os << ch;
+                else {
+                    char octals[4] = { "000" }, *out = octals+2;
+                    while (ch) { *out-- = '0' + (ch % 8); ch /= 8; }
+                    os << "\\" << octals;
+                }
+            }
+        }
     };
 
-    using BoolFeature   = GenericFeature<bool>;
+    using BoolFeature   = GenericFeature<Bool>;
     using NumberFeature = GenericFeature<Number>;
     using StringFeature = GenericFeature<String>;
 
     using Feature       = boost::variant<BoolFeature, NumberFeature, StringFeature>;
-    using Features      = std::vector<Feature>; // TODO FIXME SEHE map-like storage instead
+    using Features      = std::vector<Feature>;
 
     struct Description {
         Aliases  aliases;
@@ -63,15 +85,35 @@ namespace termcxx { namespace parser {
                 // WP: not technically part of the control characters but exists
                 ("?", 0x7f);
 
+            char_escape = '\\' > (
+                    'a' >> attr('\a')   // Alert
+                  | 'b' >> attr('\b')   // Backspace
+                  | 'E' >> attr('\x1b') // An ESCAPE character
+                  | 'e' >> attr('\x1b') // An ESCAPE character
+                  | 'f' >> attr('\f')   // Form feed
+                  | 'l' >> attr('\n')   // Linefeed
+                  | 'n' >> attr('\n')   // Newline
+                  | 'r' >> attr('\r')   // Carriage return
+                  | 's' >> attr(' ')    // Space
+                  | 't' >> attr('\t')   // Tab
+                  | '^' >> attr('^')    // Caret (^)
+                  | char_('\\')         // Backslash (\)
+                  | ',' >> attr(',')    // Comma (,)
+                  | ':' >> attr(':')    // Colon (:)
+                  // branch ordering is important here!
+                  | uint_parser<uint8_t, 8, 3, 3>() // Any character, specified as three octal digits
+                  | '0' >> attr('\0')               // Null
+                );
+
             auto white_space     = copy(lit(' ')|'\t');
             eoleoi               = eol | eoi;
             caret_escape         = '^' >> no_case[control_chars];
-            comma                = +(',' >> *white_space); // allow repeated `,,` as in line terminfo.ti:4603
+            comma                = ',' >> *white_space;
 
             alias                = +(graph - char_(",/|")) >> &char_(",|");
             longname             = +(print - char_(",|"));
             feature_name         = +(print - char_(",=#"));
-            string_feature_value = *(('\\' >> char_) | caret_escape | (print - ','));
+            string_feature_value = *(char_escape | caret_escape | (print - ','));
 
             boolean_feature      = feature_name >> qi::attr(true);
             numeric_feature      = feature_name >> '#' >> int_;
@@ -90,14 +132,14 @@ namespace termcxx { namespace parser {
             descriptions         = skip(comment_line | empty_line) [ *lexeme[ description ] ];
 
             BOOST_SPIRIT_DEBUG_NODES(
-                    (eoleoi)(comment_line)(empty_line)(comma)(caret_escape)
+                    (eoleoi)(comment_line)(empty_line)(comma)(caret_escape)(char_escape)
                     (alias)(longname)(feature_name)(boolean_feature)(numeric_feature)(string_feature_value)
                     (string_feature)(feature)(features)(aliases)(header_line)(feature_line)(description)(descriptions)
                 )
         }
 
         qi::symbols<char, char> control_chars;
-        qi::rule<Iterator, char()> caret_escape;
+        qi::rule<Iterator, char()> caret_escape, char_escape;
         qi::rule<Iterator> eoleoi, comment_line, empty_line, comma;
 
         qi::rule<Iterator, Alias()>         alias;
@@ -120,36 +162,39 @@ namespace termcxx { namespace parser {
 
 } } // namespace parser, termcxx
 
-int main() {
+int main(int argc, char** argv) {
     using It = boost::spirit::istream_iterator;
-    typedef termcxx::parser::parser<It> parser;
-    parser p;
+    termcxx::parser::parser<It> const parser;
 
-    std::ifstream f("work.ti");
-    It first(f >> std::noskipws), end;
-    termcxx::parser::Descriptions descriptions;
-    bool ok = boost::spirit::qi::parse(first, end, p, descriptions);
-
-    if (ok)
+    for (auto s : std::vector<std::string> { argv+1, argv+argc }) 
     {
-        std::cout << "Yay\n";
-        std::cout << "Parsed " << descriptions.size() << " descriptions\n";
+        std::cerr << "Parsing " << s << "\n";
+        std::ifstream f(s);
+        It first(f >> std::noskipws), end;
 
-        for (auto& d : descriptions) {
-            std::copy(d.aliases.begin(), d.aliases.end(), std::ostream_iterator<std::string>(std::cout, "|"));
-            std::cout << ", \n";
+        termcxx::parser::Descriptions descriptions;
+        bool ok = boost::spirit::qi::parse(first, end, parser, descriptions);
 
-            for (auto& f : d.features) {
-                std::cout << "\t" << "XXX, \n";
+        if (ok)
+        {
+            std::cerr << "# Parsed " << descriptions.size() << " descriptions\n";
+
+            for (auto& d : descriptions) {
+                assert(d.aliases.size()>0);
+                std::copy_n(d.aliases.begin(), d.aliases.size() - 1, std::ostream_iterator<std::string>(std::cout, "|"));
+                std::cout << d.aliases.back() << ", \n";
+
+                for (auto& f : d.features) {
+                    std::cout << "\t" << f << ",\n";
+                }
             }
         }
+        else {
+            std::cout << "# Parse failuer\n";
+        }
+
+        if (first!=end) {
+            std::cerr << "We have unparsed trailing input: '" << std::string(first, end) << "'\n";
+        }
     }
-    else
-        std::cout << "Nay\n";
-
-    if (first!=end)
-        std::cout << "We have unparsed trailing input: '" << std::string(first, end) << "'\n";
-
-    termcxx::parser::Number large("999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999");
-    std::cout << "99: " << large << "\n";
 }
