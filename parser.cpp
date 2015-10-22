@@ -61,8 +61,8 @@ namespace termcxx { namespace parser {
     using Descriptions = std::vector<Description>;
 } }
 
-BOOST_FUSION_ADAPT_TPL_STRUCT((Value), (termcxx::parser::GenericFeature) (Value), name, value)
-BOOST_FUSION_ADAPT_STRUCT(termcxx::parser::Description, aliases, features)
+BOOST_FUSION_ADAPT_TPL_STRUCT((Value), (termcxx::parser::GenericFeature) (Value), (termcxx::parser::FeatureName, name)(Value, value))
+BOOST_FUSION_ADAPT_STRUCT(termcxx::parser::Description, (termcxx::parser::Aliases, aliases)(termcxx::parser::Features, features))
 
 namespace termcxx { namespace parser {
 
@@ -105,7 +105,7 @@ namespace termcxx { namespace parser {
                   | '0' >> attr('\0')               // Null
                 );
 
-            auto white_space     = copy(lit(' ')|'\t');
+            auto white_space     = boost::proto::deep_copy(lit(' ')|'\t');
             eoleoi               = eol | eoi;
             caret_escape         = '^' >> no_case[control_chars];
             comma                = ',' >> *white_space;
